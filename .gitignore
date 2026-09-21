@@ -1,0 +1,16 @@
+# 작업 중 파일 — 배포본에 섞이면 안 되는 것들
+_chk.js
+_scratch/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# 원자료(교과서 스캔·기출 PDF 등)는 공개 저장소에 올리지 않습니다.
+_src/
+
+# 교재 원문 문항 — 절대 커밋하지 말 것.
+# 시중 판매 교재(「2026 스마트공장기능사 필기」, 건기원)를 옮긴 것이라
+# 배포는 10번 칸에서 bank.enc(AES-GCM 암호 잠금)로만 합니다.
+data/bank.js
+__pycache__/
