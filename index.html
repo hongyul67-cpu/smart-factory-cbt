@@ -145,11 +145,6 @@
   <div id="view"></div>
 </div>
 
-<!-- 문제은행.
-     이 PC 작업용 평문(data/bank.js)은 .gitignore 라 배포본에는 없습니다 — 404 가 나고 그냥 넘어갑니다.
-     배포본은 bank.enc(암호 잠금)를 받아 브라우저에서 풉니다. -->
-<script src="data/bank.js" onerror="window.SF_PLAIN=false"></script>
-
 <script>
 /* ══════════════════════════════════════════════════════════════
    스마트공장기능사 필기 CBT
@@ -1092,19 +1087,32 @@ function alertCard(title, msg){
   ov.querySelector('#okBtn').onclick = ()=> ov.remove();
 }
 
-/* ── 시작 ──────────────────────────────────────────────────── */
-if(window.SF_BANK && window.SF_BANK.length){
-  boot();                                   // 이 PC — data/bank.js 평문이 있습니다
-}else{
-  lockScreen();                             // 배포본 — 잠긴 것을 풉니다
-  /* 이 도구에서 쓰던 것 → 도구 공용 것 순서로 조용히 시도합니다 */
-  (function(){ try{
+/* 잠금 화면을 띄우고, 전에 쓰던 암호가 있으면 조용히 먼저 넣어 봅니다 */
+function startLocked(){
+  lockScreen();
+  try{
     const a = localStorage.getItem(LOCK_KEY), b = localStorage.getItem(SHARED_KEY), t = [];
     if(a) t.push(a);
-    if(b && b !== a) t.push(b);
+    if(b && b !== a) t.push(b);                    // 이 도구 것 → 도구 공용 것 순서
     (function next(i){ if(i >= t.length) return;
       unlock(t[i], true).then(ok => { if(!ok) next(i+1); }); })(0);
-  }catch(e){} })();
+  }catch(e){}
+}
+
+/* ── 시작 ──────────────────────────────────────────────────────
+   이 PC(로컬 서버·파일 열기)에서는 평문 data/bank.js 로 바로 씁니다.
+   배포본에는 그 파일이 없으므로(.gitignore) 아예 부르지 않습니다 —
+   괜히 부르면 학생 화면마다 콘솔에 404 가 남습니다.                  */
+const LOCAL = ['localhost','127.0.0.1','::1'].indexOf(location.hostname) >= 0
+              || location.protocol === 'file:';
+if(LOCAL){
+  const s = document.createElement('script');
+  s.src = 'data/bank.js';
+  s.onload  = ()=> (window.SF_BANK && window.SF_BANK.length) ? boot() : startLocked();
+  s.onerror = startLocked;                         // 평문이 없으면 잠긴 것을 풉니다
+  document.head.appendChild(s);
+}else{
+  startLocked();
 }
 </script>
 
