@@ -67,6 +67,63 @@
         font-size:12px;font-weight:700;color:var(--dim)}
   .pill.ok{background:#eafaf1;color:#0a7a3c}
   .pill.no{background:#fdeeee;color:#b3282c}
+
+  /* ── CBT 실전 화면 — 실제 시험(462쪽 화면)을 본뜬 것 ───────────── */
+  .exbar{position:sticky;top:0;z-index:5;background:var(--card);border:1px solid var(--line);
+         border-radius:12px;padding:8px 12px;margin-bottom:10px;
+         display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .exbar .grp{display:flex;gap:4px;align-items:center}
+  .exbar .lb{font-size:12px;color:var(--dim);font-weight:700}
+  .sbtn{border:1px solid var(--line);background:#f7f8fa;border-radius:8px;padding:5px 10px;
+        font-size:13px;font-weight:700;cursor:pointer;color:var(--tx)}
+  .sbtn.on{background:var(--pri);border-color:var(--pri);color:#fff}
+  .clock{margin-left:auto;font-weight:900;font-size:17px;font-variant-numeric:tabular-nums}
+  .clock.warn{color:var(--no)}
+  .exgrid{display:grid;grid-template-columns:1fr 220px;gap:12px;align-items:start}
+  .qcol{display:grid;gap:12px;align-content:start}
+  .qcol.c2{grid-template-columns:1fr 1fr}
+  .qcol.c3{grid-template-columns:1fr 1fr 1fr}
+  .exam .choice{padding:9px 12px;margin-bottom:6px}
+  .exam .qtext{font-size:16px}
+  .exam.big{font-size:17px}
+  .exam.big .qtext{font-size:20px}
+  .exam.big .choice{font-size:18px}
+  .exam .choice.sel{border-color:var(--pri);border-width:2px;background:#eef4ff}
+  /* 답안 표기란 — 실제 시험처럼 오른쪽에 붙어 따라다닙니다 */
+  .omr{position:sticky;top:60px;background:var(--card);border:1px solid var(--line);
+       border-radius:12px;padding:8px 10px}
+  .omr h4{margin:0 0 6px;font-size:13px;text-align:center}
+  .omr .rows{max-height:58vh;overflow:auto}
+  .omr .r{display:flex;align-items:center;gap:3px;padding:2px 0;border-bottom:1px solid #f1f3f6}
+  .omr .r.cur{background:#eef4ff;border-radius:6px}
+  .omr .n{width:22px;font-size:12px;font-weight:800;color:var(--dim);text-align:right;margin-right:2px;
+           border:0;background:none;cursor:pointer;padding:0}
+  .omr .n:hover{color:var(--pri);text-decoration:underline}
+  .bub{width:23px;height:23px;border-radius:50%;border:1px solid var(--line);background:#fff;
+       font-size:11px;cursor:pointer;color:var(--dim);padding:0;line-height:1}
+  .bub.on{background:var(--pri);border-color:var(--pri);color:#fff}
+  .mk{width:19px;height:19px;border:1px solid var(--line);border-radius:5px;background:#fff;
+      cursor:pointer;font-size:10px;padding:0;line-height:1}
+  .mk.on{background:#fff5da;border-color:var(--warn)}
+  .calc{position:fixed;right:16px;bottom:90px;width:226px;background:#fff;border:1px solid var(--line);
+        border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.2);padding:10px;z-index:60}
+  .calc .disp{background:#111826;color:#fff;border-radius:8px;padding:8px 10px;text-align:right;
+              font-size:20px;font-weight:800;margin-bottom:8px;overflow:hidden;white-space:nowrap}
+  .calc .pad{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  .calc .pad button{padding:9px 0;border:1px solid var(--line);background:#f7f8fa;border-radius:8px;
+                    font-weight:700;cursor:pointer;font-size:14px}
+  /* 화면 안 알림창 — 시험 중에는 브라우저 confirm 창을 쓰지 않습니다 */
+  .ovl{position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;
+       justify-content:center;z-index:80;padding:16px}
+  .ovl .box{background:#fff;border-radius:14px;padding:20px;max-width:380px;width:100%}
+  .ovl h3{margin:0 0 8px;font-size:17px}
+  .ovl .msg{color:#334;font-size:14px;line-height:1.6;white-space:pre-line}
+  @media(max-width:760px){
+    .exgrid{grid-template-columns:1fr}
+    .qcol.c2,.qcol.c3{grid-template-columns:1fr}
+    .omr{position:static}
+    .omr .rows{max-height:none}
+  }
 </style>
 </head>
 <body>
@@ -81,6 +138,7 @@
     <button class="tab on" data-view="home">🏠 범위 고르기</button>
     <button class="tab"    data-view="practice">✏️ 연습 8문항</button>
     <button class="tab"    data-view="exam">🏁 종합시험 20문항</button>
+    <button class="tab"    data-view="cbt">🖥️ CBT 실전</button>
     <button class="tab"    data-view="wrong">📕 오답노트</button>
   </div>
 
@@ -155,7 +213,7 @@ function pool(){ return FRESH.filter(r => isOn(r.c, r.s)); }
 function selCount(){ return pool().length; }
 
 /* ── 화면 전환 ─────────────────────────────────────────────── */
-let quiz = null, lastResult = null;
+let quiz = null, lastResult = null, ticker = null;
 
 document.querySelectorAll('.tab').forEach(t=>{ t.onclick = ()=> go(t.dataset.view); });
 function setTab(view){
@@ -163,11 +221,15 @@ function setTab(view){
 }
 function go(view){ setTab(view); render(view); }
 function render(view){
+  /* 화면을 옮기면 시험 시계와 계산기는 끕니다 (시계가 겹쳐 두 번 돌던 사고 방지) */
+  if(ticker){ clearInterval(ticker); ticker = null; }
+  closeCalc();
   const v = $('#view'); v.innerHTML = '';
   if(!BANK.length) return renderNoBank(v);
   if(view==='home')     return renderHome(v);
   if(view==='practice') return enterQuiz(v,'practice');
   if(view==='exam')     return enterQuiz(v,'exam');
+  if(view==='cbt')      return renderCbtHome(v);
   if(view==='wrong')    return renderWrong(v);
 }
 function renderNoBank(v){
@@ -386,9 +448,9 @@ function pick(v, idx, btn){
 }
 
 /* 오답노트에 쌓기 — 화면에 보였던 보기 순서 그대로 남깁니다 */
-function pushWrong(r, ord, src){
+function pushWrong(r, ord, src, lab){
   ST.wrong = ST.wrong.filter(w => w.id !== r.i);
-  ST.wrong.unshift({ id:r.i, c:r.c, p:r.p, q:r.q,
+  ST.wrong.unshift({ id:r.i, lab: lab || (r.c + '챕터 · ' + r.p + '쪽'), p:r.p, q:r.q,
                      o: ord.map(k => r.o[k]),
                      a: ord.indexOf(r.a), pick: ord.indexOf(src),
                      e: r.e, at: Date.now() });
@@ -481,6 +543,392 @@ function mountSubmit(pct, correct, total, sec, part, bad){
   if(btn){ btn.style.width='100%'; btn.textContent = '📤 [' + part + '] 결과 제출'; }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   CBT 실전 — 60문항 · 60분
+   교재 462쪽에 실린 실제 시험 화면을 본떴습니다.
+     글자 크기(기본/확대) · 화면 배치(1단/2단/3단) · 계산기 ·
+     제한 시간 60분과 남은 시간 · 오른쪽 답안 표기란
+
+   시험 중에는 점수·정답·해설·효과음을 전부 감춥니다(규약 2).
+   fx.js 연출과 rank.js 계급도 붙이지 않습니다 — 연습 모드에만 붙입니다.
+
+   회차는 책에 실린 순서 그대로 60문항을 냅니다(실제 시험지 재현).
+   다만 보기는 섞습니다 — 책 정답이 ②에 몰려 있어 안 섞으면 '모르면 ②'가 통합니다
+   (검수보고 2항). 해설이 보기 번호를 가리키는 문항(x)만 책 순서로 둡니다.
+   ══════════════════════════════════════════════════════════════ */
+/* 화면 안 알림창 — 브라우저 confirm 창은 수업 중에 흐름을 끊고
+   기기에 따라 막히기도 해서, 시험 화면에서는 이것만 씁니다. */
+function ask(title, msg, okLabel, onOk){
+  const ov = el(`<div class="ovl"><div class="box">
+      <h3>${esc(title)}</h3><div class="msg">${esc(msg)}</div>
+      <div class="row" style="margin-top:14px;justify-content:flex-end">
+        <button class="btn" id="askNo">취소</button>
+        <button class="btn btn-primary" id="askYes">${esc(okLabel)}</button>
+      </div></div></div>`);
+  document.body.appendChild(ov);
+  ov.querySelector('#askNo').onclick  = ()=> ov.remove();
+  ov.querySelector('#askYes').onclick = ()=>{ ov.remove(); onOk(); };
+}
+
+const EXAMS = window.SF_EXAMS || [];
+const EXBY  = {}; EXAMS.forEach(e => e.items.forEach(r => EXBY[r.i] = r));
+const CBT_MIN = 60;                       // 제한 시간(분)
+const mmss = ms => {
+  const s = Math.max(0, Math.round(ms/1000));
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+};
+
+function renderCbtHome(v){
+  if(!EXAMS.length){
+    v.appendChild(el('<div class="card"><h3>CBT 회차가 없습니다</h3>'
+      + '<div class="muted">data/bank.js 를 다시 구워 주세요(<code>python build_bank.py</code>).</div></div>'));
+    return;
+  }
+  v.appendChild(el(`<div class="card">
+    <h3>실제 시험처럼 풀어 봅니다</h3>
+    <div class="muted">한 회 <b>60문항 · 60분</b>, 합격선 60점(36문항)입니다.
+      시험 중에는 점수·정답·해설이 전혀 보이지 않습니다. 시간이 다 되면 그때까지 고른 답으로 채점합니다.</div>
+  </div>`));
+
+  if(ST.cbt){
+    const r = ST.cbt, left = r.endAt - Date.now();
+    const done = r.answers.filter(x => x !== null).length;
+    v.appendChild(el(`<div class="card">
+      <h3>보던 시험이 있습니다 — 제${r.n}회</h3>
+      <div class="muted">${done} / 60문항 표기 · 남은 시간 ${left > 0 ? mmss(left) : '0분 (시간 끝남)'}</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn btn-primary" id="cbtRsm">${left > 0 ? '이어서 보기' : '지금까지 답으로 채점하기'}</button>
+        <button class="btn" id="cbtDrop">버리기</button>
+      </div>
+      <div class="muted" style="margin-top:6px">남은 시간은 실제로 흐른 시간 기준입니다 — 창을 닫아 두어도 시계는 갑니다.</div>
+    </div>`));
+    $('#cbtRsm').onclick = ()=>{
+      if(ST.cbt.endAt - Date.now() <= 0) return gradeCbt(true);
+      drawCbt();
+    };
+    $('#cbtDrop').onclick = ()=> ask('보던 시험을 버릴까요?',
+      '표기한 답은 사라집니다.', '버리기', ()=>{ ST.cbt = null; save(); render('cbt'); });
+  }
+
+  EXAMS.forEach(e=>{
+    const card = el(`<div class="card row">
+      <b style="font-size:16px">${esc(e.t)}</b>
+      <span class="pill">${e.items.length}문항 · 교재 ${e.p}쪽</span>
+      <button class="btn btn-primary" data-start="${e.n}" style="margin-left:auto">시작</button>
+    </div>`);
+    card.querySelector('[data-start]').onclick = ()=> startCbt(e.n);
+    v.appendChild(card);
+  });
+}
+
+function startCbt(n){
+  if(ST.cbt) return ask('보던 시험이 있습니다',
+    '새로 시작하면 표기한 답이 사라집니다.', '새로 시작', ()=>{ ST.cbt = null; startCbt(n); });
+  const ex = EXAMS.find(e => e.n === n);
+  ST.cbt = {
+    n, ids: ex.items.map(r => r.i),
+    ord: ex.items.map(r => r.x ? [0,1,2,3] : shuffle([0,1,2,3])),
+    answers: ex.items.map(()=>null),      // 화면에 보이는 보기 번호(0~3)
+    marks  : ex.items.map(()=>false),     // 다시 볼 문제 표시
+    page:0, cols:1, big:false,
+    startAt: Date.now(), endAt: Date.now() + CBT_MIN*60*1000,
+  };
+  save();
+  drawCbt();
+}
+
+/* 한 화면에 보이는 문항 = 화면 배치(1단·2단·3단) */
+function cbtSlice(){
+  const r = ST.cbt, per = r.cols;
+  const from = r.page * per;
+  return { from, to: Math.min(from + per, r.ids.length), per };
+}
+
+function drawCbt(){
+  const r = ST.cbt;
+  if(!r) return render('cbt');
+  setTab('cbt');
+  const v = $('#view'); v.innerHTML = '';
+  if(ticker){ clearInterval(ticker); ticker = null; }
+
+  const stu = (()=>{ try{ return JSON.parse(localStorage.getItem('rc_student')||'{}'); }catch(e){ return {}; } })();
+  const who = (stu.cls ? stu.cls + '반 ' : '') + (stu.num ? stu.num + '번 ' : '') + (stu.name || '');
+
+  const bar = el(`<div class="exbar">
+    <div class="grp"><span class="lb">제${r.n}회</span></div>
+    <div class="grp"><span class="lb">수험자</span>
+      <span style="font-size:13px;font-weight:700">${esc(who || '이름은 제출할 때 적습니다')}</span></div>
+    <div class="grp"><span class="lb">글자 크기</span>
+      <button class="sbtn" data-big="0">기본</button><button class="sbtn" data-big="1">확대</button></div>
+    <div class="grp"><span class="lb">화면 배치</span>
+      <button class="sbtn" data-cols="1">1단</button>
+      <button class="sbtn" data-cols="2">2단</button>
+      <button class="sbtn" data-cols="3">3단</button></div>
+    <div class="grp"><button class="sbtn" id="calcBtn">🧮 계산기</button></div>
+    <div class="clock" id="clock">남은 시간 --:--</div>
+  </div>`);
+  v.appendChild(bar);
+
+  const grid = el('<div class="exgrid"></div>');
+  const qcol = el(`<div class="qcol exam c${r.cols} ${r.big?'big':''}"></div>`);
+  const omr  = el(`<div class="omr"><h4>답안 표기란</h4><div class="rows"></div>
+      <div class="muted" style="text-align:center;margin-top:6px;font-size:11px">🔖 는 다시 볼 문제</div></div>`);
+  grid.appendChild(qcol); grid.appendChild(omr);
+  v.appendChild(grid);
+
+  /* ── 문제 ── */
+  const { from, to } = cbtSlice();
+  for(let i = from; i < to; i++){
+    const q = EXBY[r.ids[i]], ord = r.ord[i];
+    const box = el(`<div class="card" data-qi="${i}">
+        <div class="qnum">${String(i+1).padStart(2,'0')}번
+          <button class="mk ${r.marks[i]?'on':''}" data-mark="${i}" title="다시 볼 문제">🔖</button></div>
+        <div class="qtext">${esc(q.q)}</div>
+        <div class="chs"></div>
+      </div>`);
+    const chs = box.querySelector('.chs');
+    ord.forEach((src, idx)=>{
+      const b = el('<button class="choice' + (r.answers[i]===idx ? ' sel' : '') + '" data-ci="'
+                 + i + '-' + idx + '">' + (idx+1) + '. ' + esc(q.o[src]) + '</button>');
+      b.onclick = ()=> markAnswer(i, idx);
+      chs.appendChild(b);
+    });
+    box.querySelector('[data-mark]').onclick = ()=> toggleMark(i);
+    qcol.appendChild(box);
+  }
+
+  /* ── 답안 표기란 — 여기서도 답을 고를 수 있습니다 ── */
+  const rows = omr.querySelector('.rows');
+  r.ids.forEach((id, i)=>{
+    const row = el(`<div class="r ${(i>=from && i<to)?'cur':''}">
+        <button class="mk ${r.marks[i]?'on':''}" data-omk="${i}">🔖</button>
+        <button class="n" data-jump="${i}" title="${i+1}번으로">${String(i+1).padStart(2,'0')}</button></div>`);
+    for(let k=0;k<4;k++){
+      const b = el('<button class="bub' + (r.answers[i]===k ? ' on' : '') + '" data-ob="'+i+'-'+k+'">'
+                 + (k+1) + '</button>');
+      b.onclick = ()=> markAnswer(i, k);
+      row.appendChild(b);
+    }
+    row.querySelector('[data-omk]').onclick = ()=> toggleMark(i);
+    row.querySelector('[data-jump]').onclick = ()=>{ r.page = Math.floor(i / r.cols); save(); drawCbt(); };
+    rows.appendChild(row);
+  });
+
+  /* ── 아래 단추 ── */
+  const pages = Math.ceil(r.ids.length / r.cols);
+  const nav = el(`<div class="card row">
+      <button class="btn" id="prev" ${r.page===0?'disabled':''}>← 이전</button>
+      <button class="btn" id="next" ${r.page>=pages-1?'disabled':''}>다음 →</button>
+      <span class="muted">${from+1}~${to}번 / 60문항 · 표기 <b id="doneN">0</b>개</span>
+      <button class="btn btn-primary" id="submit" style="margin-left:auto">답안 제출</button>
+    </div>`);
+  v.appendChild(nav);
+  $('#prev').onclick = ()=>{ r.page--; save(); drawCbt(); };
+  $('#next').onclick = ()=>{ r.page++; save(); drawCbt(); };
+  $('#submit').onclick = ()=> askSubmit();
+  $('#calcBtn').onclick = ()=> toggleCalc();
+
+  bar.querySelectorAll('[data-big]').forEach(b=>{
+    b.classList.toggle('on', String(r.big?1:0) === b.dataset.big);
+    b.onclick = ()=>{ r.big = b.dataset.big === '1'; save(); drawCbt(); };
+  });
+  bar.querySelectorAll('[data-cols]').forEach(b=>{
+    b.classList.toggle('on', String(r.cols) === b.dataset.cols);
+    b.onclick = ()=>{
+      const first = r.page * r.cols;                 // 보던 문제가 그대로 보이게 쪽을 다시 셉니다
+      r.cols = +b.dataset.cols;
+      r.page = Math.floor(first / r.cols);
+      save(); drawCbt();
+    };
+  });
+
+  countDone();
+  tickClock();
+  ticker = setInterval(tickClock, 1000);
+}
+
+/* 답을 표기해도 화면을 다시 그리지 않습니다 — 다시 그리면 스크롤이 맨 위로 튑니다.
+   문제 쪽 보기 단추와 오른쪽 답안 표기란 두 곳만 칠합니다. */
+function markAnswer(i, idx){
+  const r = ST.cbt;
+  r.answers[i] = idx;
+  save();
+  document.querySelectorAll('[data-ob^="' + i + '-"]').forEach(b=>{
+    b.classList.toggle('on', b.dataset.ob === i + '-' + idx);
+  });
+  document.querySelectorAll('[data-ci^="' + i + '-"]').forEach(b=>{
+    b.classList.toggle('sel', b.dataset.ci === i + '-' + idx);
+  });
+  countDone();
+}
+function toggleMark(i){
+  const r = ST.cbt;
+  r.marks[i] = !r.marks[i];
+  save();
+  document.querySelectorAll('[data-mark="'+i+'"], [data-omk="'+i+'"]')
+    .forEach(b => b.classList.toggle('on', r.marks[i]));
+}
+function countDone(){
+  const n = ST.cbt.answers.filter(x => x !== null).length;
+  const t = $('#doneN'); if(t) t.textContent = n;
+}
+
+function tickClock(){
+  const r = ST.cbt; if(!r) return;
+  const left = r.endAt - Date.now();
+  const c = $('#clock');
+  if(c){
+    c.textContent = '제한 ' + CBT_MIN + '분 · 남은 시간 ' + mmss(left);
+    c.classList.toggle('warn', left <= 5*60*1000);
+  }
+  if(left <= 0){
+    clearInterval(ticker); ticker = null;
+    gradeCbt(true);                 // 결과 화면에 '시간 종료'로 표시됩니다
+  }
+}
+
+function askSubmit(){
+  const r = ST.cbt;
+  const blank = r.answers.filter(x => x === null).length;
+  const marks = r.marks.filter(Boolean).length;
+  let msg = blank ? '아직 표기하지 않은 문제가 ' + blank + '개 있습니다.'
+                  : '60문항을 모두 표기했습니다.';
+  if(marks) msg += '\n🔖 다시 볼 문제로 표시한 것이 ' + marks + '개 있습니다.';
+  msg += '\n제출하면 채점되고 다시 풀 수 없습니다.';
+  ask('답안을 제출할까요?', msg, '제출', ()=> gradeCbt(false));
+}
+
+/* ── 채점 — 여기서 처음으로 정답을 봅니다 ── */
+function gradeCbt(timeUp){
+  const r = ST.cbt;
+  if(ticker){ clearInterval(ticker); ticker = null; }
+  closeCalc();
+  const sec = Math.round((Math.min(Date.now(), r.endAt) - r.startAt)/1000);
+  const bad = [];
+  let cor = 0;
+  r.ids.forEach((id, i)=>{
+    const q = EXBY[id], ord = r.ord[i], sel = r.answers[i];
+    const ok = sel !== null && ord[sel] === q.a;
+    if(ok) cor++;
+    else {
+      bad.push({ q, ord, sel, i });
+      pushWrong(q, ord, sel === null ? -1 : ord[sel], 'CBT ' + r.n + '회 ' + (i+1) + '번 · ' + q.p + '쪽');
+    }
+  });
+  const pct  = Math.round(cor / r.ids.length * 100);
+  const pass = pct >= CFG.passScore;
+  const n = r.n;
+  ST.cbt = null; save();
+
+  setTab('cbt');
+  const v = $('#view'); v.innerHTML = '';
+  v.appendChild(el(`<div class="card" style="text-align:center">
+      <span class="pill">제${n}회 CBT 실전${timeUp ? ' · 시간 종료' : ''}</span>
+      <div class="score" style="margin-top:6px">${pct}점</div>
+      <div class="muted">60문항 중 ${cor}개 정답 · ${Math.floor(sec/60)}분 ${sec%60}초</div>
+      <div style="margin-top:8px"><span class="pill ${pass?'ok':'no'}">
+        ${pass ? '합격 (60점 이상)' : '불합격 — 합격선 60점(36문항)'}</span></div>
+      <div id="rSubmitAnchor" style="margin-top:12px"></div>
+    </div>`));
+
+  /* 결과 제출 (규약 1) */
+  lastResult = {
+    mode  : '스마트공장기능사 필기 — CBT 실전 ' + n + '회',
+    score : pct, correct: cor, total: r.ids.length,
+    wrong : bad.map(b => (b.i+1) + '번 ' + b.q.q.slice(0,24) + '… → 정답 「' + b.q.o[b.q.a].slice(0,18) + '」'),
+    durationSec : sec,
+  };
+  const anchor = $('#rSubmitAnchor');
+  if(window.ResultCollector && ResultCollector.attach && anchor){
+    const btn = ResultCollector.attach(anchor, ()=>lastResult, {
+      id:'rcBtn', className:'btn btn-primary',
+      mode: lastResult.mode,
+      extra: ['스마트공장기능사 필기 CBT 실전 ' + n + '회 ' + pct + '점', pass ? '합격선 통과' : '합격선 미만'],
+    });
+    if(btn){ btn.style.width='100%'; btn.textContent = `📤 [CBT 실전 ${n}회] 결과 제출`; }
+  }
+
+  /* 오답노트 */
+  if(bad.length){
+    v.appendChild(el(`<div class="card"><h3>📕 틀린 문제 ${bad.length}개</h3>
+      <div class="muted">표기하지 않은 문제도 여기에 들어옵니다. 📕 오답노트 탭에도 쌓였습니다.</div></div>`));
+    bad.forEach(({q, ord, sel, i})=>{
+      v.appendChild(el(`<div class="card">
+        <span class="pill">${i+1}번 · 교재 ${q.p}쪽</span>
+        <div class="qtext">${esc(q.q)}</div>
+        <div class="muted">내가 고른 답 : ${sel === null ? '표기 안 함' : (sel+1) + '. ' + esc(q.o[ord[sel]])}</div>
+        <div style="color:var(--ok);font-weight:700">정답 : ${ord.indexOf(q.a)+1}. ${esc(q.o[q.a])}</div>
+        <div class="explain">${esc(q.e)}</div>
+      </div>`));
+    });
+  }
+  v.appendChild(el(`<div class="card row">
+      <button class="btn btn-primary" id="cbtBack">🖥️ 다른 회차 보기</button>
+      <button class="btn" id="cbtHome">🏠 범위 고르기</button></div>`));
+  $('#cbtBack').onclick = ()=> go('cbt');
+  $('#cbtHome').onclick = ()=> go('home');
+}
+
+/* ── 계산기 — 실제 시험 화면에 있는 것 ── */
+let calcSt = null;
+function closeCalc(){
+  const c = document.getElementById('calcBox'); if(c) c.remove();
+  calcSt = null;
+}
+function toggleCalc(){
+  if(document.getElementById('calcBox')) return closeCalc();
+  calcSt = { cur:'0', acc:null, op:null, fresh:true };
+  const keys = ['C','←','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','0','.','=',''];
+  const box = el(`<div class="calc" id="calcBox">
+      <div class="disp" id="calcDisp">0</div><div class="pad"></div>
+      <button class="sbtn" id="calcClose" style="width:100%;margin-top:6px">닫기</button>
+    </div>`);
+  const pad = box.querySelector('.pad');
+  keys.forEach(k=>{
+    if(!k){ pad.appendChild(el('<span></span>')); return; }
+    const b = el('<button>' + k + '</button>');
+    b.onclick = ()=> calcKey(k);
+    pad.appendChild(b);
+  });
+  box.querySelector('#calcClose').onclick = closeCalc;
+  document.body.appendChild(box);
+}
+function calcKey(k){
+  const s = calcSt; if(!s) return;
+  const disp = ()=>{ const d = document.getElementById('calcDisp'); if(d) d.textContent = s.cur; };
+  const num = v => parseFloat(v || '0');
+  const apply = ()=>{
+    if(s.op === null || s.acc === null) return num(s.cur);
+    const a = s.acc, b = num(s.cur);
+    const r = s.op==='+' ? a+b : s.op==='−' ? a-b : s.op==='×' ? a*b
+            : s.op==='÷' ? (b===0 ? NaN : a/b) : b;
+    return r;
+  };
+  if(k === 'C'){ calcSt = { cur:'0', acc:null, op:null, fresh:true }; return disp(); }
+  if(k === '←'){ s.cur = s.cur.length>1 ? s.cur.slice(0,-1) : '0'; return disp(); }
+  if(k === '%'){ s.cur = String(num(s.cur)/100); s.fresh = true; return disp(); }
+  if('+−×÷'.indexOf(k) >= 0){
+    const r = apply();
+    s.acc = isNaN(r) ? null : r; s.op = k; s.fresh = true;
+    s.cur = s.acc === null ? '오류' : String(+r.toFixed(10));
+    return disp();
+  }
+  if(k === '='){
+    const r = apply();
+    s.cur = isNaN(r) ? '오류' : String(+r.toFixed(10));
+    s.acc = null; s.op = null; s.fresh = true;
+    return disp();
+  }
+  if(k === '.'){
+    if(s.fresh){ s.cur = '0.'; s.fresh = false; }
+    else if(s.cur.indexOf('.') < 0) s.cur += '.';
+    return disp();
+  }
+  if(s.fresh || s.cur === '0' || s.cur === '오류'){ s.cur = k; s.fresh = false; }
+  else s.cur += k;
+  disp();
+}
+
 /* ── 오답노트 (쌓인 것) ────────────────────────────────────── */
 function renderWrong(v){
   if(!ST.wrong.length){
@@ -491,15 +939,13 @@ function renderWrong(v){
       <b>${ST.wrong.length}문항</b>
       <span class="muted">틀린 문제만 모았습니다. 같은 문제를 또 틀리면 맨 위로 올라옵니다.</span>
       <button class="btn" id="clrWrong">비우기</button></div>`));
-  $('#clrWrong').onclick = ()=>{
-    if(!confirm('오답노트를 비울까요?')) return;
-    ST.wrong = []; save(); render('wrong');
-  };
+  $('#clrWrong').onclick = ()=> ask('오답노트를 비울까요?',
+    '쌓인 오답이 모두 지워집니다.', '비우기', ()=>{ ST.wrong = []; save(); render('wrong'); });
   ST.wrong.forEach(w=>{
     v.appendChild(el(`<div class="card">
-      <span class="pill">${w.c}챕터 · ${w.p}쪽</span>
+      <span class="pill">${esc(w.lab || (w.c + '챕터 · ' + w.p + '쪽'))}</span>
       <div class="qtext">${esc(w.q)}</div>
-      <div class="muted">내가 고른 답 : ${w.pick+1}. ${esc(w.o[w.pick])}</div>
+      <div class="muted">내가 고른 답 : ${w.pick < 0 ? '표기 안 함' : (w.pick+1) + '. ' + esc(w.o[w.pick])}</div>
       <div style="color:var(--ok);font-weight:700">정답 : ${w.a+1}. ${esc(w.o[w.a])}</div>
       <div class="explain">${esc(w.e)}</div>
     </div>`));
