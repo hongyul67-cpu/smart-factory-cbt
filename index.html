@@ -145,9 +145,10 @@
   <div id="view"></div>
 </div>
 
-<!-- 문제은행 — 교재 문항이라 평문 파일은 커밋하지 않습니다(.gitignore).
-     배포본은 10번 칸에서 bank.enc(암호 잠금)로 바꿔 답니다. -->
-<script src="data/bank.js"></script>
+<!-- 문제은행.
+     이 PC 작업용 평문(data/bank.js)은 .gitignore 라 배포본에는 없습니다 — 404 가 나고 그냥 넘어갑니다.
+     배포본은 bank.enc(암호 잠금)를 받아 브라우저에서 풉니다. -->
+<script src="data/bank.js" onerror="window.SF_PLAIN=false"></script>
 
 <script>
 /* ══════════════════════════════════════════════════════════════
@@ -179,11 +180,10 @@ const esc = s => String(s==null?'':s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'
    반 전체가 같은 문제·같은 보기 순서를 받습니다. */
 const shuffle = a => a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(v=>v[1]);
 
-const BANK  = window.SF_BANK  || [];
-const CHAPS = window.SF_CH    || [];
-const BYID  = {}; BANK.forEach(r => BYID[r.i] = r);
-/* 출제 대상 = 중복 표시(d) 없는 문항 */
-const FRESH = BANK.filter(r => !r.d);
+/* 문제은행은 화면이 뜬 뒤에 채워집니다 — 이 PC 는 data/bank.js 로 바로,
+   배포본은 암호를 풀고 bank.enc 에서. 그래서 const 가 아니라 let 입니다. */
+let BANK = [], CHAPS = [], EXAMS = [], BYID = {}, EXBY = {}, FRESH = [];
+const secCnt = {};                     // 절마다 출제 대상 수
 
 /* ── 저장 ──────────────────────────────────────────────────── */
 const ST = load();
@@ -202,12 +202,7 @@ function allKeys(){
   CHAPS.forEach(ch => ch.secs.forEach(s => ks.push(secKey(ch.c, s.s))));
   return ks;
 }
-if(!ST.sel || !Object.keys(ST.sel).length){
-  ST.sel = {}; allKeys().forEach(k => ST.sel[k] = true); save();
-}
 const isOn   = (c,s) => !!ST.sel[secKey(c,s)];
-const secCnt = {};                     // 절마다 출제 대상 수
-FRESH.forEach(r => { const k = secKey(r.c, r.s); secCnt[k] = (secCnt[k]||0) + 1; });
 const chCnt  = ch => ch.secs.reduce((n,s) => n + (secCnt[secKey(ch.c,s.s)]||0), 0);
 function pool(){ return FRESH.filter(r => isOn(r.c, r.s)); }
 function selCount(){ return pool().length; }
@@ -570,8 +565,6 @@ function ask(title, msg, okLabel, onOk){
   ov.querySelector('#askYes').onclick = ()=>{ ov.remove(); onOk(); };
 }
 
-const EXAMS = window.SF_EXAMS || [];
-const EXBY  = {}; EXAMS.forEach(e => e.items.forEach(r => EXBY[r.i] = r));
 const CBT_MIN = 60;                       // 제한 시간(분)
 const mmss = ms => {
   const s = Math.max(0, Math.round(ms/1000));
@@ -952,12 +945,167 @@ function renderWrong(v){
   });
 }
 
+/* ══════════════════════════════════════════════════════════════
+   암호 잠금 — 시중 교재 문항이라 파일 자체를 잠갔습니다
+
+   정적 호스팅(GitHub Pages)에서는 화면에 비밀번호 칸만 두면 보호가 되지 않습니다.
+   데이터 파일 주소를 직접 치면 그대로 받아지기 때문입니다.
+   그래서 bank.enc 를 AES-GCM 으로 실제 암호화해 올리고 여기서 WebCrypto 로 풉니다.
+   (굽는 것은 build_lock.py — 이 파일에는 암호도 열쇠도 없습니다)
+
+   암호는 두 가지입니다.
+     교사용 — 문구형, 만료 없음. 열면 그 주 학생 코드가 화면에 나옵니다.
+     학생용 — 8자리 숫자, 그 주 월요일 ~ 다음 월요일 7일만.
+   기간은 암호문 '안에' 들어 있어 이 파일을 고쳐도 넘길 수 없습니다.
+
+   한 번 연 기기는 다음부터 그냥 열리고, 같은 주소의 다른 도구도 함께 풀립니다.
+   ══════════════════════════════════════════════════════════════ */
+const LOCK_KEY = 'sfcbt_v1_pw', SHARED_KEY = 'hong_pw_v1';
+const b64 = x => Uint8Array.from(atob(x), c => c.charCodeAt(0));
+const isoOf = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+                                   + '-' + String(d.getDate()).padStart(2,'0');
+const mondayOf = d => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay()+6)%7));
+                        x.setHours(0,0,0,0); return x; };
+
+/* 문제은행이 들어왔을 때 화면을 세웁니다 (평문이든 푼 것이든 여기 한 곳으로) */
+function boot(){
+  BANK  = window.SF_BANK  || [];
+  CHAPS = window.SF_CH    || [];
+  EXAMS = window.SF_EXAMS || [];
+  BYID = {}; BANK.forEach(r => BYID[r.i] = r);
+  EXBY = {}; EXAMS.forEach(e => e.items.forEach(r => EXBY[r.i] = r));
+  FRESH = BANK.filter(r => !r.d);                  // 출제 대상 = 중복 표시(d) 없는 문항
+  Object.keys(secCnt).forEach(k => delete secCnt[k]);
+  FRESH.forEach(r => { const k = secKey(r.c, r.s); secCnt[k] = (secCnt[k]||0) + 1; });
+  if(!ST.sel || !Object.keys(ST.sel).length){      // 처음에는 전 범위
+    ST.sel = {}; allKeys().forEach(k => ST.sel[k] = true); save();
+  }
+  $('#hdSub').textContent = BANK.length
+    ? '문제은행 ' + BANK.length + '문항 · ' + CHAPS.length + '챕터'
+      + (EXAMS.length ? ' · CBT ' + EXAMS.length + '회' : '')
+    : '문제은행을 불러오지 못했습니다';
+  render('home');
+}
+
+function lockScreen(msg, cls){
+  document.querySelectorAll('.tab').forEach(t => t.style.display = 'none');
+  const v = $('#view');
+  v.innerHTML = '';
+  v.appendChild(el(`<div class="card">
+    <h3>🔒 암호를 넣어 주세요</h3>
+    <div class="muted">시중 교재(「2026 스마트공장기능사 필기」, 건기원)의 문항이라
+      수업 목적으로만 열 수 있게 파일 자체를 잠갔습니다.
+      <b id="lockN"></b></div>
+    <div class="row" style="margin-top:12px">
+      <input id="lockPw" type="password" placeholder="암호 또는 8자리 코드"
+             style="flex:1;min-width:180px;padding:11px 12px;font-size:16px;
+                    border:1px solid var(--line);border-radius:10px">
+      <button class="btn btn-primary" id="lockGo">열기</button>
+    </div>
+    <div id="lockMsg" class="muted" style="margin-top:10px;min-height:20px"></div>
+    <div class="muted" style="margin-top:10px">한 번 연 기기는 다음부터 그냥 열립니다.
+      학생은 선생님께 이번 주 코드를 받으세요.</div>
+  </div>`));
+  $('#lockGo').onclick = ()=> unlock($('#lockPw').value.replace(/\s+/g,''));
+  $('#lockPw').addEventListener('keydown', e => { if(e.key === 'Enter') $('#lockGo').click(); });
+  if(msg) say(msg, cls);
+  fetch('bank.enc', {cache:'no-store'}).then(r => r.json())
+    .then(b => { $('#lockN').textContent = (b.n || '') + '문항'; })
+    .catch(()=>{ $('#lockN').textContent = '(문제은행을 찾지 못했습니다)'; });
+}
+function say(t, c){
+  const m = $('#lockMsg'); if(!m) return;
+  m.innerHTML = t;
+  m.style.color = c === 'bad' ? 'var(--no)' : (c === 'ok' ? 'var(--ok)' : 'var(--dim)');
+}
+
+async function findKey(kek, keys){
+  for(const k of keys){
+    try{
+      const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64(k.iv)}, kek, b64(k.blob));
+      return JSON.parse(new TextDecoder().decode(plain));
+    }catch(_){}
+  }
+  throw new Error('BADPW');
+}
+/* 교사용으로 열면 그 주 학생 코드를 계산해 보여 줍니다.
+   마스터 시크릿은 교사용으로 감싼 안쪽에만 있어 학생 코드로는 계산할 수 없습니다. */
+async function weekCode(msB64, prefix, mon){
+  const k = await crypto.subtle.importKey('raw', b64(msB64), {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k,
+    new TextEncoder().encode((prefix || 'HONGW|') + isoOf(mon))));
+  const n = ((sig[0]<<24)>>>0) + (sig[1]<<16) + (sig[2]<<8) + sig[3];
+  return String(n % 90000000 + 10000000);
+}
+
+async function unlock(pw, quiet){
+  if(!pw) return;
+  try{
+    if(!quiet) say('여는 중…');
+    const blob = await (await fetch('bank.enc', {cache:'no-store'})).json();
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    const kek = await crypto.subtle.deriveKey(
+      {name:'PBKDF2', salt:b64(blob.kdf.salt), iterations:blob.kdf.iter, hash:'SHA-256'},
+      base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+    const info = await findKey(kek, blob.keys);
+    const today = isoOf(new Date());
+    if(info.nbf && today <  info.nbf){ const e = new Error('NOTYET');  e.when = info.nbf; throw e; }
+    if(info.exp && today >= info.exp){ const e = new Error('EXPIRED'); e.when = info.exp; throw e; }
+
+    const ck = await crypto.subtle.importKey('raw', b64(info.ck), {name:'AES-GCM'}, false, ['decrypt']);
+    const sealed = b64(blob.data);
+    const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:sealed.slice(0,12)}, ck, sealed.slice(12));
+    const ds = new DecompressionStream('gzip');      // gzip 해제는 브라우저 내장
+    const txt = await new Response(new Blob([plain]).stream().pipeThrough(ds)).text();
+    const j = JSON.parse(txt);
+    window.SF_BUILT = j.built; window.SF_CH = j.ch; window.SF_BANK = j.bank; window.SF_EXAMS = j.exams;
+
+    try{
+      localStorage.setItem(LOCK_KEY, pw);
+      if(!info.exp) localStorage.setItem(SHARED_KEY, pw);   // 만료되는 코드는 공용에 넣지 않습니다
+    }catch(e){}
+
+    document.querySelectorAll('.tab').forEach(t => t.style.display = '');
+    boot();
+    if(!quiet && info.role === 'teacher' && info.ms){
+      const c = await weekCode(info.ms, info.prefix, mondayOf(new Date()));
+      alertCard('이번 주 학생 코드 — ' + c.slice(0,4) + ' ' + c.slice(4),
+                '오늘부터 다음 월요일까지 씁니다. 학생에게 이 코드를 알려 주세요.');
+    }
+    return true;
+  }catch(e){
+    const m = e && e.message;
+    if(m === 'EXPIRED')     say('사용 기간이 끝난 코드입니다(' + e.when + '까지). 선생님께 이번 주 코드를 받으세요.', 'bad');
+    else if(m === 'NOTYET') say('아직 쓸 수 없는 코드입니다. ' + e.when + '부터 쓸 수 있어요.', 'bad');
+    else if(!quiet)         say('암호가 맞지 않습니다.', 'bad');
+    try{ localStorage.removeItem(LOCK_KEY); }catch(_){}   // 공용 키는 건드리지 않습니다
+    return false;
+  }
+}
+/* 교사에게만 보이는 알림 — 화면 위에 한 장 띄웁니다 */
+function alertCard(title, msg){
+  const ov = el(`<div class="ovl"><div class="box">
+      <h3>${esc(title)}</h3><div class="msg">${esc(msg)}</div>
+      <div class="row" style="margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-primary" id="okBtn">확인</button></div></div></div>`);
+  document.body.appendChild(ov);
+  ov.querySelector('#okBtn').onclick = ()=> ov.remove();
+}
+
 /* ── 시작 ──────────────────────────────────────────────────── */
-$('#hdSub').textContent = BANK.length
-  ? '문제은행 ' + BANK.length + '문항 · ' + CHAPS.length + '챕터'
-    + (window.SF_EXAMS ? ' · CBT ' + window.SF_EXAMS.length + '회' : '')
-  : '문제은행을 불러오지 못했습니다';
-render('home');
+if(window.SF_BANK && window.SF_BANK.length){
+  boot();                                   // 이 PC — data/bank.js 평문이 있습니다
+}else{
+  lockScreen();                             // 배포본 — 잠긴 것을 풉니다
+  /* 이 도구에서 쓰던 것 → 도구 공용 것 순서로 조용히 시도합니다 */
+  (function(){ try{
+    const a = localStorage.getItem(LOCK_KEY), b = localStorage.getItem(SHARED_KEY), t = [];
+    if(a) t.push(a);
+    if(b && b !== a) t.push(b);
+    (function next(i){ if(i >= t.length) return;
+      unlock(t[i], true).then(ok => { if(!ok) next(i+1); }); })(0);
+  }catch(e){} })();
+}
 </script>
 
 <!-- 공용 위젯 — 순서 그대로 두세요 (규약 1 · 3 · 3-1) -->
